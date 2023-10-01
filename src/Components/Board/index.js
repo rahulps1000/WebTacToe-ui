@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./style.css";
 
 import Cross from "../Cross";
@@ -6,25 +6,25 @@ import Circle from "../Circle";
 
 let initData = ["", "", "", "", "", "", "", "", ""];
 
-const Board = () => {
+const Board = ({ socket, roomId, update }) => {
   const [count, setCount] = useState(0);
-  const [lock, setLock] = useState(false);
+  const [admin, setAdmin] = useState(false);
   const [data, setData] = useState(initData);
 
   const mark = (v) => {
-    if (lock) {
-      return 0;
-    } else if (data[v] === "") {
-      if (count % 2 === 0) {
+    if (data[v] === "") {
+      if (count % 2 === 0 && admin) {
+        let temp = data;
+        temp[v] = "x";
+        setData(temp);
+      } else if (count % 2 === 1 && !admin) {
         let temp = data;
         temp[v] = "o";
         setData(temp);
       } else {
-        let temp = data;
-        temp[v] = "x";
-        setData(temp);
+        return;
       }
-      checkWinner();
+      socket.emit("move", roomId, v);
       setCount((x) => x + 1);
     }
   };
@@ -39,40 +39,39 @@ const Board = () => {
     }
   };
 
-  const checkWinner = () => {
-    if (data[0] !== "" && data[0] === data[1] && data[1] === data[2]) {
-      return wonGame(data[0]);
-    }
-    if (data[3] !== "" && data[3] === data[4] && data[4] === data[5]) {
-      return wonGame(data[3]);
-    }
-    if (data[6] !== "" && data[6] === data[7] && data[7] === data[8]) {
-      return wonGame(data[6]);
-    }
-    if (data[0] !== "" && data[0] === data[3] && data[3] === data[6]) {
-      return wonGame(data[0]);
-    }
-    if (data[1] !== "" && data[1] === data[4] && data[4] === data[7]) {
-      return wonGame(data[1]);
-    }
-    if (data[2] !== "" && data[2] === data[5] && data[5] === data[8]) {
-      return wonGame(data[2]);
-    }
-    if (data[0] !== "" && data[0] === data[4] && data[4] === data[8]) {
-      return wonGame(data[0]);
-    }
-    if (data[2] !== "" && data[2] === data[4] && data[4] === data[6]) {
-      return wonGame(data[2]);
-    }
-    if (!data.includes("")) {
-      return wonGame("draw");
-    }
+  const resetBoard = () => {
+    socket.emit("resetBoard", roomId);
+    setCount(0);
+    alert("Game Over!");
+    setData(initData);
   };
 
-  const wonGame = (player) => {
-    setLock(true);
-    console.log(player);
-  };
+  useEffect(() => {
+    socket.emit("startGame", roomId);
+    socket.on("startGame", (game) => {
+      if (game.admin === socket.id) {
+        setAdmin(true);
+      } else {
+        setAdmin(false);
+      }
+      setData(game.board);
+      setCount(game.player);
+      update.name(game.names);
+      update.score(game.score);
+    });
+    socket.on("move", () => {
+      socket.emit("gameOver", roomId);
+    });
+    socket.on("gameOver", (game) => {
+      update.name(game.names);
+      update.score(game.score);
+      resetBoard();
+    });
+
+    return () => {
+      socket.off();
+    };
+  }, [data]); // eslint-disable-line
 
   return (
     <div className="board_container">
